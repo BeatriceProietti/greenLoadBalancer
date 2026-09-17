@@ -1,0 +1,13 @@
+x-exp-env: &exp-env
+  LB_STRATEGY: "green_lc"
+  LB_TOP_K: "30"
+
+services:
+  lb-node-1: { environment: *exp-env }
+  lb-node-2: { environment: *exp-env }
+  lb-node-3: { environment: *exp-env }
+  lb-node-4: { environment: *exp-env }
+  lb-node-5: { environment: *exp-env }
+
+  loadgen:
+    entrypoint: ["sh", "-c", "sleep 6 && /app/loadgen_bin -urls=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task -n=500 -c=50 -o=/app/output/results_green_topk_k30.csv"]

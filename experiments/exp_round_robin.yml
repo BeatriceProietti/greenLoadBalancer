@@ -1,0 +1,15 @@
+x-exp-env: &exp-env
+  LB_STRATEGY: "round_robin"
+
+services:
+  lb-node-1: { environment: *exp-env }
+  lb-node-2: { environment: *exp-env }
+  lb-node-3: { environment: *exp-env }
+  lb-node-4: { environment: *exp-env }
+  lb-node-5: { environment: *exp-env }
+
+  loadgen:
+    entrypoint: ["sh", "-c", "sleep 15 && /app/loadgen_bin -urls=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task -n=300 -c=20 -o=/app/output/results_baseline_rr.csv"]
+
+# COMANDO:
+# docker compose -f docker-compose.yaml -f experiments/exp_round_robin.yml up --build --abort-on-container-exit

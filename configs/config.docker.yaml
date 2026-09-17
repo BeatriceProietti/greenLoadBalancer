@@ -1,0 +1,58 @@
+lb:
+  port: "8080"
+  strategy: "round_robin"
+  alpha: 0.15
+  top_k_percent: 0.30
+  max_active_requests: 100
+  max_missed_heartbeats: 3
+
+  heartbeat_interval_ms: 2000
+  election_timeout_ms: 3000
+  rpc_timeout_ms: 800
+  coordinator_wait_timeout_ms: 3500
+
+  carbon_query_interval_s: 300 # 5 minutes
+  electricity_maps_token: "YOUR_TOKEN_HERE"
+
+  nodes:
+    - id: "lb-node-1"
+      priority: 1
+      grpc_address: "lb-node-1:9091"
+    - id: "lb-node-2"
+      priority: 2
+      grpc_address: "lb-node-2:9092"
+    - id: "lb-node-3"
+      priority: 3
+      grpc_address: "lb-node-3:9093"
+    - id: "lb-node-4"
+      priority: 4
+      grpc_address: "lb-node-4:9094"
+    - id: "lb-node-5"
+      priority: 5
+      grpc_address: "lb-node-5:9095"
+
+workers:
+  - id: "worker-1"
+    url: "http://worker-1:8081"
+    grpc_address: "worker-1:9081"
+    zone: "SE"
+  - id: "worker-2"
+    url: "http://worker-2:8082"
+    grpc_address: "worker-2:9082"
+    zone: "FR"
+  - id: "worker-3"
+    url: "http://worker-3:8083"
+    grpc_address: "worker-3:9083"
+    zone: "GB"
+  - id: "worker-4"
+    url: "http://worker-4:8084"
+    grpc_address: "worker-4:9084"
+    zone: "IT-NO"
+  - id: "worker-5"
+    url: "http://worker-5:8085"
+    grpc_address: "worker-5:9085"
+    zone: "DE"
+  - id: "worker-6"
+    url: "http://worker-6:8086"
+    grpc_address: "worker-6:9086"
+    zone: "PL"

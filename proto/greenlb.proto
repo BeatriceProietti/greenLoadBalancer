@@ -1,0 +1,67 @@
+syntax = "proto3";
+option go_package = "greenLoadBalancer/internal/pb;pb";
+
+
+// =====================================================================
+// Service 1: LEADER -> WORKER (Telemetry, Heartbeat)
+// =====================================================================
+service WorkerService {
+  rpc Heartbeat (PingRequest) returns (TelemetryResponse);
+}
+
+message PingRequest {
+  string leader_id = 1; // Il Leader dice "Sono io, rispondimi"
+}
+
+message TelemetryResponse {
+  string worker_id = 1;
+  float current_power_watts = 2; // Watt
+  bool is_healthy = 3;           // true if the worker is ok
+}
+
+
+// =====================================================================
+// Service 2: LB -> LB (Bully algorithm, Synchronization)
+// =====================================================================
+service ClusterService {
+  // 1. Fase di Elezione Bully
+  rpc StartElection (ElectionRequest) returns (ElectionResponse);
+  rpc AnnounceCoordinator (CoordinatorAnnouncement) returns (Ack);
+
+  // 2. Fase di Sincronizzazione dello Stato (Leader -> Follower)
+  rpc SyncState (StateUpdateRequest) returns (Ack);
+}
+
+// === Election messages ===
+message ElectionRequest {
+  int32 candidate_id = 1; // Nel Bully, l'ID (es. numero porta o IP) determina chi vince
+}
+
+message ElectionResponse {
+  bool step_down = 1; // Se true, il nodo che ha ricevuto la richiesta ha un ID maggiore e blocca il candidato
+}
+
+message CoordinatorAnnouncement {
+  int32 leader_id = 1;
+  string leader_address = 2; // Indirizzo gRPC del nuovo leader
+}
+
+// === Synchronization messages ===
+message StateUpdateRequest {
+  // ID del leader che invia l'update: permette al follower di scartare
+  // messaggi arrivati in ritardo da un leader ormai deposto (vedi PDF, Q4).
+  int32 leader_id = 2;
+  // Il Leader invia l'intera mappa dei worker ai Follower
+  map<string, WorkerData> workers = 1;
+}
+
+message WorkerData {
+  string address = 1;
+  float power_watts = 2;
+  float carbon_intensity = 3;
+  bool is_active = 4;
+}
+
+message Ack {
+  bool success = 1;
+}

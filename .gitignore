@@ -1,0 +1,22 @@
+# Variabili d'ambiente e segreti (CRITICO)
+.env
+*.env
+
+# IDE e editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# Binari compilati Go
+bin/
+dist/
+*.exe
+*.test
+
+# Risultati temporanei e benchmark
+results/
+*.csv
+*.log
+*.pem
+*.ppk

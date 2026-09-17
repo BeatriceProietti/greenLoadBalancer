@@ -1,0 +1,198 @@
+# Modello comune per i nodi LB
+x-lb-common: &lb-common
+  build:
+    context: .
+    dockerfile: docker/lb/Dockerfile
+  image: green-lb-node:latest
+  env_file: [ .env ]
+  volumes:
+    - ./configs/config.docker.yaml:/root/configs/config.yaml:ro
+  stop_signal: SIGTERM
+  stop_grace_period: 2s
+
+# Modello comune per i Worker
+x-worker-common: &worker-common
+  build:
+    context: .
+    dockerfile: docker/worker/Dockerfile
+  image: green-worker-node:latest
+  stop_signal: SIGTERM
+  stop_grace_period: 2s
+
+services:
+  # =================================================================
+  # WORKER NODES (6 Regioni)
+  # =================================================================
+  worker-1:
+    <<: *worker-common
+    container_name: worker-1
+    environment:
+      - WORKER_ID=worker-1
+      - REGION=SE
+      - HTTP_PORT=8081
+      - GRPC_PORT=9081
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8081:8081"
+      - "9081:9081"
+
+  worker-2:
+    <<: *worker-common
+    container_name: worker-2
+    depends_on: [ worker-1 ]
+    environment:
+      - WORKER_ID=worker-2
+      - REGION=FR
+      - HTTP_PORT=8082
+      - GRPC_PORT=9082
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8082:8082"
+      - "9082:9082"
+
+  worker-3:
+    <<: *worker-common
+    container_name: worker-3
+    depends_on: [ worker-1 ]
+    environment:
+      - WORKER_ID=worker-3
+      - REGION=GB
+      - HTTP_PORT=8083
+      - GRPC_PORT=9083
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8083:8083"
+      - "9083:9083"
+
+  worker-4:
+    <<: *worker-common
+    container_name: worker-4
+    depends_on: [ worker-1 ]
+    environment:
+      - WORKER_ID=worker-4
+      - REGION=IT-NO
+      - HTTP_PORT=8084
+      - GRPC_PORT=9084
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8084:8084"
+      - "9084:9084"
+
+  worker-5:
+    <<: *worker-common
+    container_name: worker-5
+    depends_on: [ worker-1 ]
+    environment:
+      - WORKER_ID=worker-5
+      - REGION=DE
+      - HTTP_PORT=8085
+      - GRPC_PORT=9085
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8085:8085"
+      - "9085:9085"
+  worker-6:
+    <<: *worker-common
+    container_name: worker-6
+    depends_on: [ worker-1 ]
+    environment:
+      - WORKER_ID=worker-5
+      - REGION=PL
+      - HTTP_PORT=8086
+      - GRPC_PORT=9086
+      - SCAPHANDRE_URL=http://scaphandre:8080/metrics
+      - DEFAULT_POWER_WATTS=2.50
+    ports:
+      - "8086:8086"
+      - "9086:9086"
+
+  # =================================================================
+  # LB CLUSTER (5 Nodi)
+  # =================================================================
+  lb-node-1:
+    <<: *lb-common
+    container_name: lb-node-1
+    depends_on: [ worker-1, worker-2, worker-3, worker-4, worker-5, worker-6 ]
+    environment:
+      - LB_ID=lb-node-1
+      - HTTP_PORT=8080
+    ports:
+      - "8080:8080"
+      - "9091:9091"
+
+  lb-node-2:
+    <<: *lb-common
+    container_name: lb-node-2
+    depends_on: [ lb-node-1 ]
+    environment:
+      - LB_ID=lb-node-2
+      - HTTP_PORT=8080
+    ports:
+      - "8090:8080"
+      - "9092:9092"
+
+  lb-node-3:
+    <<: *lb-common
+    container_name: lb-node-3
+    depends_on: [ lb-node-1 ]
+    environment:
+      - LB_ID=lb-node-3
+      - HTTP_PORT=8080
+    ports:
+      - "8100:8080"
+      - "9093:9093"
+
+  lb-node-4:
+    <<: *lb-common
+    container_name: lb-node-4
+    depends_on: [ lb-node-1 ]
+    environment:
+      - LB_ID=lb-node-4
+      - HTTP_PORT=8080
+    ports:
+      - "8110:8080"
+      - "9094:9094"
+
+  lb-node-5:
+    <<: *lb-common
+    container_name: lb-node-5
+    depends_on: [ lb-node-1 ]
+    environment:
+      - LB_ID=lb-node-5
+      - HTTP_PORT=8080
+    ports:
+      - "8120:8080"
+      - "9095:9095"
+
+  # =================================================================
+  # LOAD GENERATOR
+  # =================================================================
+  loadgen:
+    build:
+      context: .
+      dockerfile: docker/loadgen/Dockerfile
+    container_name: loadgen
+    depends_on: [ lb-node-5 ]
+    volumes:
+      - ./results:/app/output
+
+  # =================================================================
+  # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER
+  # =================================================================
+  scaphandre:
+    image: hubblo/scaphandre:latest
+    container_name: scaphandre
+    command: ["prometheus"]
+    privileged: true
+    pid: "host"
+    volumes:
+      - /sys:/sys:ro
+      - /proc:/proc:ro
+    ports:
+      - "8088:8080"
+    restart: unless-stopped
