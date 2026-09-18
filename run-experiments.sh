@@ -31,9 +31,9 @@ POLICIES=(round_robin least_connection green_topk green_lc)
 # — con un margine di sicurezza applicato apposta, perche' la stima parte
 # da un singolo run degradato dall'eviction, non da una misura pulita.
 export LOADGEN_REQUESTS="${LOADGEN_REQUESTS:-1000}"
-export LOADGEN_CONCURRENCY="${LOADGEN_CONCURRENCY:-6}"
+export LOADGEN_CONCURRENCY="${LOADGEN_CONCURRENCY:-18}"
 export LOADGEN_DIFFICULTY_MIN="${LOADGEN_DIFFICULTY_MIN:-20000}"
-export LOADGEN_DIFFICULTY_MAX="${LOADGEN_DIFFICULTY_MAX:-300000}"
+export LOADGEN_DIFFICULTY_MAX="${LOADGEN_DIFFICULTY_MAX:-500000}"
 
 mkdir -p results
 
