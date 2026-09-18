@@ -30,9 +30,6 @@ var (
 	latestWattsMu sync.RWMutex
 	latestWatts   float32
 
-	// activeTasks conta le richieste /task attualmente in esecuzione su
-	// questo worker: e' il segnale di carico che guida il mock di potenza
-	// quando Scaphandre non e' disponibile (vedi mockPowerWatts).
 	activeTasks int64
 )
 
@@ -51,7 +48,7 @@ func startPowerMonitor() {
 
 		watts := fetchScaphandreWatts(scaphURL)
 
-		// Aggiorniamo il valore solo se valido, altrimenti teniamo l'ultimo noto
+		// Update only if the value is valid
 		if watts > 0 {
 			latestWattsMu.Lock()
 			latestWatts = watts
@@ -128,14 +125,10 @@ func fetchScaphandreWatts(url string) float32 {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		// Nessun log di errore qui: su cloud/VM standard questo ramo e'
-		// SEMPRE quello che si prende (verificato), quindi loggarlo come
-		// "warning" a ogni ciclo sarebbe solo rumore.
 		return mockPowerWatts()
 	}
 	defer resp.Body.Close()
 
-	// 3. Espansione del buffer per gestire righe (cmdline) lunghissime di Scaphandre
 	scanner := bufio.NewScanner(resp.Body)
 	buf := make([]byte, 64*1024)
 	scanner.Buffer(buf, 512*1024)
@@ -153,7 +146,6 @@ func fetchScaphandreWatts(url string) float32 {
 				microWatts, err := strconv.ParseFloat(fields[1], 64)
 				if err == nil {
 					watts := float32(microWatts / 1_000_000.0)
-					// 4. Log di successo aggiunto
 					log.Printf("[WORKER] ⚡ Scaphandre letto con successo: %.2f W", watts)
 					return watts
 				}
@@ -161,7 +153,7 @@ func fetchScaphandreWatts(url string) float32 {
 		}
 	}
 
-	// 5. Intercettazione dell'errore di buffer (se Scaphandre viene troncato)
+	// In case the buffer is truncated
 	if err := scanner.Err(); err != nil {
 		log.Printf("[WORKER] ⚠️ Errore buffer su Scaphandre: %v", err)
 	} else {
@@ -171,21 +163,11 @@ func fetchScaphandreWatts(url string) float32 {
 	return mockPowerWatts()
 }
 
-// mockPowerWatts stima la potenza istantanea quando l'hardware reale
-// (Scaphandre/RAPL) non e' disponibile — condizione verificata essere SEMPRE
-// vera su qualunque cloud/VM standard (Nitro su AWS EC2, Docker Desktop,
-// WSL2, ...): l'hypervisor non espone i registri RAPL al guest, e Scaphandre
-// va in panic invece di restituire un dato parziale. Il flag --vm di
-// Scaphandre non e' un'alternativa utilizzabile in questi casi: richiede
-// un'altra istanza di Scaphandre in esecuzione sull'hypervisor stesso, cosa
-// che su EC2 e' gestito da AWS e non e' accessibile all'utente.
-//
-// Il modello, invece di un valore fisso, riproduce la forma tipica della
-// potenza di un package CPU reale: un pavimento a riposo (idle) piu' una
-// quota dinamica che cresce con il carico e satura (P ≈ P_idle + P_dyn *
-// utilizzo), cosi' che il valore riportato reagisca davvero al numero di
-// richieste concorrenti in corso — a differenza del vecchio fallback
-// costante, che restava identico indipendentemente da qualunque stress test.
+// mockPowerWatts estimates instantaneous power when real hardware
+// (Scaphandre/RAPL) is unavailable.
+// Instead of a fixed value, the model reproduces the typical power profile
+// of a real CPU package, ensuring the reported value genuinely responds
+// to the number of concurrent requests in progress.
 func mockPowerWatts() float32 {
 	idleWatts := float64(2.50)
 	if val := os.Getenv("DEFAULT_POWER_WATTS"); val != "" {
@@ -208,11 +190,11 @@ func mockPowerWatts() float32 {
 	}
 
 	tasks := float64(atomic.LoadInt64(&activeTasks))
-	utilization := 1 - math.Exp(-tasks/saturationTasks) // 0 a riposo, tende a 1 sotto carico
+	utilization := 1 - math.Exp(-tasks/saturationTasks)
 
 	base := idleWatts + dynamicWatts*utilization
 
-	// Piccola fluttuazione casuale per realismo.
+	// Small fluctuation
 	fluctuation := base * 0.04
 	offset := (rand.Float64() * fluctuation * 2) - fluctuation
 
@@ -221,8 +203,6 @@ func mockPowerWatts() float32 {
 
 // handleTask simulates the working load
 func handleTask(w http.ResponseWriter, r *http.Request) {
-	// Segnala al mock di potenza che un task e' in corso: e' questo contatore
-	// che fa "salire i watt" quando arrivano piu' richieste concorrenti.
 	atomic.AddInt64(&activeTasks, 1)
 	defer atomic.AddInt64(&activeTasks, -1)
 

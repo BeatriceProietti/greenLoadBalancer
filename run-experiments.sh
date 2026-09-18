@@ -1,8 +1,8 @@
 #!/bin/bash
-# Esegue tutte e 4 le policy, N volte ciascuna, con stack completo
-# down+up a ogni run (nessuno stato residuo tra un run e l'altro) e un
-# nome di file CSV distinto per ogni (policy, run) cosi' i risultati non
-# si sovrascrivono.
+# Executes all 4 policies, N times each, with a full stack
+# (tearing down and bringing the stack back up for each run—no residual state between runs)
+# and a distinct CSV filename for each (policy, run) so that results
+# do not overwrite each other.
 set -e
 cd "$(dirname "$0")"
 
@@ -20,9 +20,6 @@ for policy in "${POLICIES[@]}"; do
     echo " Policy: $policy — run $run/$RUNS"
     echo "=============================================="
 
-    # Stack completo spento e riacceso: niente stato residuo (task attivi,
-    # leader eletto, ecc.) tra un run e l'altro — stesse condizioni di
-    # partenza per ogni misura, come richiesto.
     docker compose -f docker-compose.yaml -f "experiments/exp_${policy}.yml" down -v 2>/dev/null || true
 
     export LOADGEN_OUTPUT="/app/output/results_${policy}_run${run}.csv"

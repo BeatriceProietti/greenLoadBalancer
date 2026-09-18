@@ -1,4 +1,4 @@
-# Modello comune per i nodi LB
+# Common model for LB nodes
 x-lb-common: &lb-common
   build:
     context: .
@@ -10,7 +10,7 @@ x-lb-common: &lb-common
   stop_signal: SIGTERM
   stop_grace_period: 2s
 
-# Modello comune per i Worker
+# Common model for workers
 x-worker-common: &worker-common
   build:
     context: .
@@ -21,7 +21,7 @@ x-worker-common: &worker-common
 
 services:
   # =================================================================
-  # WORKER NODES (6 Regioni)
+  # WORKER NODES (6 Regions)
   # =================================================================
   worker-1:
     <<: *worker-common
@@ -192,14 +192,11 @@ services:
     depends_on: [ lb-node-5 ]
     volumes:
       - ./results:/app/output
-    # Il comando resta FISSO e identico per qualunque esperimento: tutto
-    # cio' che deve cambiare da un run all'altro (LB_STRATEGY/ALPHA/TOP_K_
-    # PERCENT, e LOADGEN_OUTPUT per non sovrascrivere il CSV precedente)
-    # viene passato via "environment", mai toccando questo comando. E'
-    # necessario per un confronto equo tra policy: se ogni exp_*.yml avesse
-    # un proprio comando con -n/-c/sleep diversi (com'era prima), i risultati
-    # non sarebbero comparabili — la differenza osservata potrebbe venire dal
-    # carico diverso, non dalla policy. Vedi PDF "Metodologia esperimenti".
+    # The command remains FIXED and identical for every experiment: everything
+    # that needs to change from one run to the next (LB_STRATEGY/ALPHA/TOP_K_
+    # PERCENT, and LOADGEN_OUTPUT to avoid overwriting the previous CSV)
+    # is passed via the "environment," without ever altering this command. This
+    # is necessary for a fair comparison between policies
     entrypoint: [ "sh", "-c" ]
     command:
       - "sleep 10 && ./loadgen_bin"
@@ -213,7 +210,7 @@ services:
       - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/benchmark_results.csv}
 
   # =================================================================
-  # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER - RIMOSSO
+  # TELEMETRY: SCAPHANDRE PROMETHEUS EXPORTER - Removed
   # =================================================================
   #scaphandre:
   #  image: hubblo/scaphandre:latest

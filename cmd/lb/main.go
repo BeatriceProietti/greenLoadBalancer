@@ -39,7 +39,7 @@ type WorkerNode struct {
 type LoadBalancer struct {
 	ID              string
 	Priority        int32  // priority used in the bully algorithm
-	SelfGRPCAddress string // indirizzo su cui QUESTO nodo espone ClusterService
+	SelfGRPCAddress string // address on which THIS node exposes ClusterService
 
 	Workers []*WorkerNode
 	Peers   []*PeerNode // other LB nodes in the cluster
@@ -57,7 +57,6 @@ func main() {
 		log.Fatalf("Errore caricamento config: %v", err)
 	}
 
-	// Override da ENV se specificati (permette gli esperimenti via Docker Compose)
 	if envStrat := os.Getenv("LB_STRATEGY"); envStrat != "" {
 		cfg.LB.Strategy = envStrat
 	}
@@ -95,8 +94,7 @@ func main() {
 		shutdown: make(chan struct{}),
 	}
 
-	// Trova il proprio indirizzo gRPC nella lista condivisa lb.nodes (stesso
-	// config.docker.yaml montato su ogni container, ci si riconosce tramite LB_ID).
+	// Finds its own gRPC address in the shared lb.nodes list
 	for _, n := range cfg.LB.Nodes {
 		if n.ID == lbID {
 			lb.SelfGRPCAddress = n.GRPCAddress
@@ -132,15 +130,12 @@ func main() {
 		})
 	}
 
-	// Client gRPC verso worker e verso peer LB (nessuna connessione fisica
-	// aperta subito: grpc.NewClient e' lazy, si connette al primo RPC reale).
+	// Client gRPC towards the worker and towards LB peer
 	lb.ConnectToWorkers()
 	lb.ConnectToPeers()
 
-	// Server gRPC per ClusterService: gli altri nodi devono poter chiamare
-	// StartElection / AnnounceCoordinator / SyncState su di noi.
-	// NOTA: si ascolta sulla porta del PROPRIO grpc_address (letto sopra da
-	// lb.nodes), non su un valore condiviso: ogni nodo ha la sua.
+	// gRPC server for ClusterService: other nodes must be able to call
+	// StartElection / AnnounceCoordinator / SyncState on us.
 	_, selfPort, err := net.SplitHostPort(lb.SelfGRPCAddress)
 	if err != nil {
 		log.Fatalf("grpc_address non valido per %s (%q): %v", lbID, lb.SelfGRPCAddress, err)
@@ -158,15 +153,10 @@ func main() {
 		}
 	}()
 
-	// Al boot nessun nodo conosce ancora il leader: si parte tutti da
-	// un'elezione, invece di aspettare che scada il primo watchdog. Ma se
-	// durante questa breve attesa e' GIA' arrivato un AnnounceCoordinator
-	// legittimo (un peer con priorita' piu' alta puo' essersi eletto ed
-	// essersi annunciato prima che i 200ms scadano), non ha senso aprire
-	// comunque un'elezione ridondante: porterebbe a un ciclo di rielezioni
-	// a vuoto (bug osservato: "Nessun annuncio di coordinatore ricevuto in
-	// tempo: rieleggo." ripetuto all'infinito nonostante il leader vero
-	// fosse vivo e raggiungibile).
+	// At boot, no node yet knows the leader: everyone starts by
+	// initiating an election, rather than waiting for the first watchdog to expire. But if
+	// a legitimate AnnounceCoordinator has ALREADY arrived during this brief wait,
+	// there is no point in starting a redundant election.
 	time.Sleep(200 * time.Millisecond)
 	lb.election.mu.RLock()
 	alreadyKnowsLeader := lb.election.leaderID != 0

@@ -12,7 +12,7 @@ import (
 	pb "greenLoadBalancer/internal/pb"
 )
 
-// NodeState rappresenta il ruolo corrente del nodo nel cluster LB.
+// NodeState represents the current role of the node in the LB cluster
 type NodeState int32
 
 const (
@@ -34,7 +34,7 @@ func (s NodeState) String() string {
 	}
 }
 
-// PeerNode e' un altro nodo del cluster LB, raggiungibile via ClusterService.
+// PeerNode is another node in the LB cluster, which can be reached via ClusterService
 type PeerNode struct {
 	ID       string
 	Priority int32
@@ -42,8 +42,7 @@ type PeerNode struct {
 	Client   pb.ClusterServiceClient
 }
 
-// ElectionState raggruppa tutto lo stato mutabile dell'algoritmo di elezione.
-// E' tenuto separato dal resto di LoadBalancer solo per leggibilita'.
+// ElectionState groups together all the mutable state of the election algorithm
 type ElectionState struct {
 	mu sync.RWMutex
 
@@ -52,16 +51,16 @@ type ElectionState struct {
 	leaderAddr string
 
 	electionInProgress bool
-	electionDone       chan struct{} // chiuso quando l'elezione corrente si conclude (vittoria propria o altrui)
+	electionDone       chan struct{} // closed when the current election is concluded
 
-	watchdog *time.Timer // fa scattare una nuova elezione se il leader tace troppo a lungo
+	watchdog *time.Timer // triggers a new election if the leader remains silent for too long
 
-	leaderDutiesStop chan struct{} // non-nil se questo nodo sta correntemente facendo le "leader duties"
+	leaderDutiesStop chan struct{} // non-nil if this node is currently performing "leader duties"
 }
 
-// ConnectToPeers crea i client gRPC verso tutti gli altri nodi del cluster
-// elencati in config.docker.yaml (lb.nodes), escludendo se stesso (ID e Priority di
-// questo nodo sono gia' stati risolti in main() prima di questa chiamata).
+// ConnectToPeers creates gRPC clients to all other cluster nodes
+// listed in config.docker.yaml (lb.nodes), excluding itself (ID and Priority of
+// this node have already been resolved in main() prior to this call)
 func (lb *LoadBalancer) ConnectToPeers() {
 	for _, n := range lb.Config.LB.Nodes {
 		if n.ID == lb.ID {
@@ -82,18 +81,18 @@ func (lb *LoadBalancer) ConnectToPeers() {
 }
 
 // ---------------------------------------------------------------------
-// Avvio dell'elezione (lato "candidato")
+// Start election (candidate side)
 // ---------------------------------------------------------------------
 
-// StartElection avvia un tentativo di elezione Bully. Puo' essere chiamata:
-//   - al boot, esplicitamente da main(), perche' nessun nodo conosce ancora il leader;
-//   - dal watchdog, quando un follower sospetta il leader morto (N heartbeat mancati);
-//   - da un candidato la cui attesa del Coordinator scade (retry).
+// StartElection initiates a Bully election attempt. It can be called:
+// - at boot, explicitly from main(), because no node knows the leader yet;
+// - by the watchdog, when a follower suspects the leader is dead (N missed heartbeats);
+// - by a candidate whose wait for the Coordinator times out (retry).
 func (lb *LoadBalancer) StartElection() {
 	lb.election.mu.Lock()
 	if lb.election.electionInProgress {
 		lb.election.mu.Unlock()
-		return // un'elezione e' gia' in corso: non se ne avviano di concorrenti dallo stesso nodo
+		return // an election is already occurring
 	}
 	lb.election.electionInProgress = true
 	lb.election.state = StateCandidate
@@ -106,7 +105,7 @@ func (lb *LoadBalancer) StartElection() {
 	higherPeers := lb.peersWithHigherPriority()
 
 	if len(higherPeers) == 0 {
-		// Nessun nodo con priorita' maggiore ancora vivo dal mio punto di vista: mi eleggo.
+		// From my pov there is no node with higher priority: I elect myself
 		lb.becomeLeader()
 		return
 	}
@@ -143,15 +142,13 @@ func (lb *LoadBalancer) StartElection() {
 	// nei log di verifica: vedi PDF, Q4 "concurrent elections").
 	select {
 	case <-stepDownReceived:
-		go func() { wg.Wait() }() // lascia terminare le goroutine restanti senza bloccare
+		go func() { wg.Wait() }()
 		lb.awaitCoordinatorOrRetry(done)
 	case <-done:
-		// Risolta da altrove (un annuncio legittimo e' gia' arrivato): nulla da fare.
+		// A legitimate announce is already arrived: nothing to do
 	case <-time.After(lb.Config.LB.ElectionTimeout()):
-		// Controllo finale, autoritativo, sotto lock: anche se "done" e il
-		// timeout scattano nello stesso istante (select sceglie a caso tra
-		// case pronti contemporaneamente), qui verifichiamo lo stato vero
-		// invece di fidarci ciecamente della sola scadenza del timer.
+		// select chooses randomly (if done and timeout expire at the same time):
+		// let's verify the real state
 		lb.election.mu.Lock()
 		stillMine := lb.election.electionDone == done
 		lb.election.mu.Unlock()
@@ -162,8 +159,7 @@ func (lb *LoadBalancer) StartElection() {
 	}
 }
 
-// peersWithHigherPriority ritorna i peer con priorita' maggiore della propria:
-// nel Bully si manda Election solo "verso l'alto".
+// peersWithHigherPriority return peer with higher priority
 func (lb *LoadBalancer) peersWithHigherPriority() []*PeerNode {
 	var higher []*PeerNode
 	for _, p := range lb.Peers {
@@ -174,15 +170,14 @@ func (lb *LoadBalancer) peersWithHigherPriority() []*PeerNode {
 	return higher
 }
 
-// awaitCoordinatorOrRetry aspetta l'annuncio del nuovo leader (chiusura del
-// canale "done" associato a questo tentativo di elezione). Se scade il tempo
-// senza che nessun Coordinator sia stato annunciato, il nodo con priorita'
-// maggiore che aveva risposto "step down" e' a sua volta caduto nel
-// frattempo: si riprova daccapo.
+// awaitCoordinatorOrRetry waits for the announcement of the new leader (closure of the
+// // "done" channel associated with this election attempt). If the timeout expires
+// // without any Coordinator being announced, the node with higher priority
+// // that had responded "step down" has itself failed in the
+// // meantime: the process starts over from the beginning.
 func (lb *LoadBalancer) awaitCoordinatorOrRetry(done chan struct{}) {
 	select {
 	case <-done:
-		// Stato aggiornato altrove (AnnounceCoordinator o becomeLeader): nulla da fare.
 	case <-time.After(lb.Config.LB.CoordinatorWaitTimeout()):
 		log.Printf("[%s] Nessun annuncio di coordinatore ricevuto in tempo: rieleggo.", lb.ID)
 		lb.election.mu.Lock()
@@ -193,7 +188,7 @@ func (lb *LoadBalancer) awaitCoordinatorOrRetry(done chan struct{}) {
 }
 
 // ---------------------------------------------------------------------
-// Diventare leader / riconoscere un nuovo leader
+// Becoming leader / acknowledge a new leader
 // ---------------------------------------------------------------------
 
 func (lb *LoadBalancer) becomeLeader() {
@@ -203,14 +198,14 @@ func (lb *LoadBalancer) becomeLeader() {
 	lb.election.leaderAddr = lb.SelfGRPCAddress
 	lb.election.electionInProgress = false
 	lb.closeElectionDoneLocked()
-	lb.stopWatchdogLocked() // il leader non sospetta se stesso
+	lb.stopWatchdogLocked() // leader doesn't suspect itself
 	lb.election.mu.Unlock()
 
 	log.Printf("[%s] 👑 Sono il nuovo LEADER (priority=%d)", lb.ID, lb.Priority)
 
 	for _, p := range lb.Peers {
 		go func(peer *PeerNode) {
-			// Riprova fino a 3 volte con un breve intervallo per dare tempo al peer di avviare gRPC
+			// 3 attempts
 			for attempt := 0; attempt < 3; attempt++ {
 				ctx, cancel := context.WithTimeout(context.Background(), lb.Config.LB.RPCTimeout())
 				_, err := peer.Client.AnnounceCoordinator(ctx, &pb.CoordinatorAnnouncement{
@@ -227,22 +222,18 @@ func (lb *LoadBalancer) becomeLeader() {
 		}(p)
 	}
 
-	// Solo il leader fa polling Scaphandre sui worker e propaga lo stato.
 	lb.StartLeaderDuties()
 }
 
-// StartElection (RPC server-side): un altro nodo mi chiede di partecipare
-// a un'elezione come candidato di priorita' inferiore/uguale alla mia
-// (per costruzione, nel Bully riceve questa RPC solo chi ha priorita' maggiore
-// del chiamante).
+// StartElection (RPC server-side): another node asks me to participate
+// // in an election as a candidate with lower or equal priority to mine
+// // (by design, in the Bully algorithm, only a node with higher priority
+// // than the caller receives this RPC).
 func (lb *LoadBalancer) HandleStartElection(ctx context.Context, req *pb.ElectionRequest) (*pb.ElectionResponse, error) {
 	if req.GetCandidateId() < lb.Priority {
-		// Rispondo "fermati, ci penso io". Avvio una MIA elezione solo se non
-		// ho gia' un leader riconosciuto (vero bootstrap, leaderID ancora 0):
-		// se sono gia' leader, o sono follower con un leader valido, la mia
-		// elezione non aggiungerebbe nulla e sovraccaricherebbe il cluster di
-		// round ridondanti — che e' esattamente cio' che ha causato la falsa
-		// elezione osservata nel test (vedi PDF, Q4: "concurrent elections").
+		// I initiate an election of my own only if I
+		// do not already have a recognized leader (true bootstrap, leaderID still 0):
+		// Verify that I am already the leader, or a follower with a valid leader, to avoid concurrent elections.
 		lb.election.mu.RLock()
 		hasKnownLeader := lb.election.state == StateLeader ||
 			(lb.election.state == StateFollower && lb.election.leaderID != 0)
@@ -252,23 +243,13 @@ func (lb *LoadBalancer) HandleStartElection(ctx context.Context, req *pb.Electio
 		}
 		return &pb.ElectionResponse{StepDown: true}, nil
 	}
-	// Non dovrebbe accadere in un Bully "per manuale" (si notifica solo chi ha
-	// priorita' maggiore), gestito comunque in modo difensivo.
 	return &pb.ElectionResponse{StepDown: false}, nil
 }
 
-// AnnounceCoordinator (RPC server-side): un nodo annuncia di essere il nuovo leader.
 func (lb *LoadBalancer) HandleAnnounceCoordinator(ctx context.Context, req *pb.CoordinatorAnnouncement) (*pb.Ack, error) {
 	lb.election.mu.Lock()
 
-	// Difesa in profondita', oltre al fix nel timeout di StartElection: se so
-	// per certo di essere vivo e con priorita' maggiore di chi si annuncia
-	// (sono Leader), un annuncio piu' debole non puo' essere corretto — al
-	// piu' e' un residuo di una race gia' risolta altrove. Non e' ambiguo
-	// come il caso "follower con leaderID magari stale": qui la certezza
-	// (sono vivo, la mia priorita' e' nota) e' assoluta.
-
-	// 1. Se sono leader con priorità maggiore, rifiuto
+	// If I am the leader with higher priority: deny
 	if lb.election.state == StateLeader && req.GetLeaderId() < lb.Priority {
 		lb.election.mu.Unlock()
 		log.Printf("[%s] AnnounceCoordinator da leader_id=%d ignorato: sono gia' leader con priority=%d",
@@ -276,7 +257,7 @@ func (lb *LoadBalancer) HandleAnnounceCoordinator(ctx context.Context, req *pb.C
 		return &pb.Ack{Success: false}, nil
 	}
 
-	// 2. Se sono follower e riconosco già un leader con priorità MAGGIORE di chi si annuncia, rifiuto!
+	// If I am a follower with a legittimate leader, which has higher priority than the announced one: deny
 	if lb.election.state == StateFollower && lb.election.leaderID > req.GetLeaderId() {
 		lb.election.mu.Unlock()
 		log.Printf("[%s] AnnounceCoordinator da leader_id=%d ignorato: riconosco gia' leader_id=%d",
@@ -295,8 +276,7 @@ func (lb *LoadBalancer) HandleAnnounceCoordinator(ctx context.Context, req *pb.C
 	lb.resetWatchdog()
 
 	if wasLeader {
-		// Ero leader ma e' arrivato un annuncio da un nodo con priorita'
-		// maggiore (es. rientrato dopo un crash): smetto di fare polling/broadcast.
+		// If a node was a leader but it gets a message from a higher-priority node:
 		lb.StopLeaderDuties()
 	}
 
@@ -304,8 +284,6 @@ func (lb *LoadBalancer) HandleAnnounceCoordinator(ctx context.Context, req *pb.C
 	return &pb.Ack{Success: true}, nil
 }
 
-// closeElectionDoneLocked chiude (una sola volta) il canale che sblocca chi e'
-// in attesa dell'esito dell'elezione corrente. Va chiamata con election.mu gia' locked.
 func (lb *LoadBalancer) closeElectionDoneLocked() {
 	if lb.election.electionDone != nil {
 		close(lb.election.electionDone)
@@ -314,12 +292,12 @@ func (lb *LoadBalancer) closeElectionDoneLocked() {
 }
 
 // ---------------------------------------------------------------------
-// Watchdog: rilevamento del leader morto lato follower
+// Watchdog: leader's death detection
 // ---------------------------------------------------------------------
 
-// resetWatchdog riarma il timer di sospetto-leader-morto. Va chiamata ogni
-// volta che arriva un segnale di vita dal leader corrente (AnnounceCoordinator
-// o SyncState, che qui funge anche da heartbeat periodico leader->follower).
+// resetWatchdog resets the suspected-dead-leader timer. It must be called every
+// time a sign of life is received from the current leader (AnnounceCoordinator
+// or SyncState, which here also serves as a periodic leader-to-follower heartbeat).
 func (lb *LoadBalancer) resetWatchdog() {
 	d := lb.Config.LB.LeaderSuspicionTimeout()
 	lb.election.mu.Lock()
@@ -336,7 +314,6 @@ func (lb *LoadBalancer) resetWatchdog() {
 	log.Printf("[%s] ⏱️  Watchdog resettato per %v", lb.ID, d)
 }
 
-// stopWatchdogLocked ferma il watchdog. Va chiamata con election.mu gia' locked.
 func (lb *LoadBalancer) stopWatchdogLocked() {
 	if lb.election.watchdog != nil {
 		lb.election.watchdog.Stop()

@@ -45,13 +45,10 @@ func (lb *LoadBalancer) ConnectToWorkers() {
 // Leader duties: polling worker (Scaphandre) + broadcast SyncState ai peer
 // ---------------------------------------------------------------------
 
-// StartLeaderDuties viene chiamata solo da becomeLeader(). E' l'unico punto
-// del sistema in cui si fa polling energetico reale: i follower non
-// interrogano mai direttamente i worker, ricevono lo stato via SyncState.
 func (lb *LoadBalancer) StartLeaderDuties() {
 	lb.election.mu.Lock()
 
-	// Se nel frattempo siamo stati retrocessi a follower, abortisci subito
+	// If, in the meantime, we’ve been demoted to followers, abort immediately
 	if lb.election.state != StateLeader {
 		lb.election.mu.Unlock()
 		return
@@ -59,7 +56,7 @@ func (lb *LoadBalancer) StartLeaderDuties() {
 
 	if lb.election.leaderDutiesStop != nil {
 		lb.election.mu.Unlock()
-		return // gia' in esecuzione (non dovrebbe succedere, difensivo)
+		return // Fallback
 	}
 	stop := make(chan struct{})
 	lb.election.leaderDutiesStop = stop
@@ -103,8 +100,6 @@ func (lb *LoadBalancer) StartLeaderDuties() {
 	}()
 }
 
-// StopLeaderDuties ferma il polling/broadcast. Chiamata quando questo nodo
-// scopre di essere stato "sorpassato" da un leader con priorita' maggiore.
 func (lb *LoadBalancer) StopLeaderDuties() {
 	lb.election.mu.Lock()
 	defer lb.election.mu.Unlock()
@@ -114,8 +109,7 @@ func (lb *LoadBalancer) StopLeaderDuties() {
 	}
 }
 
-// pingWorker esegue l'heartbeat verso un singolo worker e ne aggiorna lo stato,
-// con eviction a soglia (N fallimenti consecutivi) invece che a singolo timeout.
+// pingWorker executes the heartbeat toward a single worker and updates its state, evicting it if needed
 func (lb *LoadBalancer) pingWorker(worker *WorkerNode) {
 	if worker.GRPCClient == nil {
 		return
@@ -149,9 +143,7 @@ func (lb *LoadBalancer) pingWorker(worker *WorkerNode) {
 	worker.PowerWatts = float64(resp.GetCurrentPowerWatts())
 }
 
-// pingAllWorkers esegue un fan-out concorrente dell'heartbeat verso tutti i worker.
-// Se wait e' true, blocca fino al completamento dell'intero giro (usato solo al boot,
-// cosi' che il primo routing HTTP non parta con stato ancora vuoto).
+// pingAllWorkers: concurrent fan-out towards all the workers
 func (lb *LoadBalancer) pingAllWorkers(wait bool) {
 	var wg sync.WaitGroup
 	for _, w := range lb.Workers {
@@ -166,8 +158,6 @@ func (lb *LoadBalancer) pingAllWorkers(wait bool) {
 	}
 }
 
-// buildStateSnapshot legge lo stato corrente di tutti i worker (protetto da
-// RLock) e lo trasforma nel formato del proto, pronto per il broadcast.
 func (lb *LoadBalancer) buildStateSnapshot() map[string]*pb.WorkerData {
 	out := make(map[string]*pb.WorkerData, len(lb.Workers))
 	for _, w := range lb.Workers {
@@ -183,10 +173,7 @@ func (lb *LoadBalancer) buildStateSnapshot() map[string]*pb.WorkerData {
 	return out
 }
 
-// broadcastState invia lo stato corrente a tutti i peer. Viene chiamata
-// incondizionatamente a ogni ciclo (non solo quando qualcosa cambia): questa
-// stessa chiamata e' anche l'heartbeat che tiene vivo il watchdog dei follower
-// (vedi resetWatchdog in election.go, e PDF Q1).
+// broadcastState to all the peers
 func (lb *LoadBalancer) broadcastState() {
 	snapshot := lb.buildStateSnapshot()
 	for _, p := range lb.Peers {

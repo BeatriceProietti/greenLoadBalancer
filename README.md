@@ -1,6 +1,6 @@
 Green Load Balancer — Load Balancing Carbon-Aware con Elezione del Leader
 ==========================================================================
-Questo progetto è un cluster di **Load Balancer distribuiti e carbon-aware** per il corso di **Sistemi Distribuiti e Cloud Computing**. I nodi LB si organizzano tramite l'algoritmo di elezione **Bully** (via gRPC), instradano il traffico verso 6 worker simulati in altrettante regioni con politiche sensibili al consumo energetico e all'intensità di carbonio, e tollerano guasti di nodi LB e worker tramite heartbeat periodici. Il tutto è containerizzato con **Docker** e orchestrato con **Docker Compose**.
+Questo progetto è un cluster di **Load Balancer distribuiti energy-aware carbon-aware** per il corso di **Sistemi Distribuiti e Cloud Computing**. I nodi LB si organizzano tramite l'algoritmo di elezione **Bully** (via gRPC), instradano il traffico verso 6 worker simulati in altrettante regioni con politiche sensibili al consumo energetico e all'intensità di carbonio, e tollerano guasti di nodi LB e worker tramite heartbeat periodici. Il tutto è containerizzato con **Docker** e orchestrato con **Docker Compose**.
 
 L'implementazione è realizzata in **Go (Golang)** ed è orchestrata tramite **Docker** e **Docker Compose** per una facile gestione e deployment.
 
@@ -135,12 +135,6 @@ Esperimenti e analisi
 1. Confronto delle 4 policy, N run ciascuna (default 5), con stack riavviato tra un run e l'altro:
    ```bash
    ./run-experiments.sh
-   ```
-
-2. Generare tutti i grafici di analisi dai CSV prodotti sopra:
-   ```bash
-   pip install matplotlib
-   python generate_all_graphs.py
    ```
 
 ---------
