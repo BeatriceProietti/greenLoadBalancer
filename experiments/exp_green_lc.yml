@@ -10,4 +10,8 @@ services:
   lb-node-5: { environment: *exp-env }
 
   loadgen:
-    entrypoint: ["sh", "-c", "sleep 6 && /app/loadgen_bin -urls=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task -n=500 -c=50 -o=/app/output/results_green_lc_a015.csv"]
+    environment:
+      - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/results_green_lc_a015.csv}
+
+# COMANDO:
+# docker compose -f docker-compose.yaml -f experiments/exp_green_lc.yml up --build --abort-on-container-exit

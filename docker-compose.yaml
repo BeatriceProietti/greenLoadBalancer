@@ -33,6 +33,8 @@ services:
       - GRPC_PORT=9081
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8081:8081"
       - "9081:9081"
@@ -48,6 +50,8 @@ services:
       - GRPC_PORT=9082
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8082:8082"
       - "9082:9082"
@@ -63,6 +67,8 @@ services:
       - GRPC_PORT=9083
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8083:8083"
       - "9083:9083"
@@ -78,6 +84,8 @@ services:
       - GRPC_PORT=9084
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8084:8084"
       - "9084:9084"
@@ -93,6 +101,8 @@ services:
       - GRPC_PORT=9085
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8085:8085"
       - "9085:9085"
@@ -101,12 +111,14 @@ services:
     container_name: worker-6
     depends_on: [ worker-1 ]
     environment:
-      - WORKER_ID=worker-5
+      - WORKER_ID=worker-6
       - REGION=PL
       - HTTP_PORT=8086
       - GRPC_PORT=9086
       - SCAPHANDRE_URL=http://scaphandre:8080/metrics
       - DEFAULT_POWER_WATTS=2.50
+      - MOCK_DYNAMIC_POWER_WATTS=12.0
+      - SATURATION_TASKS=8.0
     ports:
       - "8086:8086"
       - "9086:9086"
@@ -180,6 +192,25 @@ services:
     depends_on: [ lb-node-5 ]
     volumes:
       - ./results:/app/output
+    # Il comando resta FISSO e identico per qualunque esperimento: tutto
+    # cio' che deve cambiare da un run all'altro (LB_STRATEGY/ALPHA/TOP_K_
+    # PERCENT, e LOADGEN_OUTPUT per non sovrascrivere il CSV precedente)
+    # viene passato via "environment", mai toccando questo comando. E'
+    # necessario per un confronto equo tra policy: se ogni exp_*.yml avesse
+    # un proprio comando con -n/-c/sleep diversi (com'era prima), i risultati
+    # non sarebbero comparabili — la differenza osservata potrebbe venire dal
+    # carico diverso, non dalla policy. Vedi PDF "Metodologia esperimenti".
+    entrypoint: [ "sh", "-c" ]
+    command:
+      - "sleep 10 && ./loadgen_bin"
+    environment:
+      - LOADGEN_URLS=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task
+      - LOADGEN_REQUESTS=3000
+      - LOADGEN_CONCURRENCY=30
+      - LOADGEN_DIFFICULTY_MIN=50000
+      - LOADGEN_DIFFICULTY_MAX=4000000
+      - LOADGEN_SEED=42
+      - LOADGEN_OUTPUT=/app/output/benchmark_results.csv
 
   # =================================================================
   # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER

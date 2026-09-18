@@ -1,5 +1,10 @@
 x-exp-env: &exp-env
-  LB_STRATEGY: "least_connection"
+  # FIX: era "least_connection" (singolare). Il switch in policy.go confronta
+  # con "least_connections" (plurale) — con lo spelling sbagliato la stringa
+  # non corrispondeva a nessun case e PolicyFactory ricadeva silenziosamente
+  # sul default (RoundRobin): questo esperimento stava eseguendo Round Robin
+  # travestito da Least Connections, non la vera policy da confrontare.
+  LB_STRATEGY: "least_connections"
 
 services:
   lb-node-1: { environment: *exp-env }
@@ -9,7 +14,8 @@ services:
   lb-node-5: { environment: *exp-env }
 
   loadgen:
-    entrypoint: ["sh", "-c", "sleep 15 && /app/loadgen_bin -urls=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task -n=300 -c=20 -o=/app/output/results_baseline_lc.csv"]
+    environment:
+      - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/results_least_connections.csv}
 
 # COMANDO:
-# docker compose -f docker-compose.yaml -f experiments/exp_round_robin.yml up --build --abort-on-container-exit
+# docker compose -f docker-compose.yaml -f experiments/exp_least_connection.yml up --build --abort-on-container-exit

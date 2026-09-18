@@ -6,12 +6,15 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pb "greenLoadBalancer/internal/pb"
@@ -26,6 +29,11 @@ var (
 	grpcPort      = os.Getenv("GRPC_PORT")
 	latestWattsMu sync.RWMutex
 	latestWatts   float32
+
+	// activeTasks conta le richieste /task attualmente in esecuzione su
+	// questo worker: e' il segnale di carico che guida il mock di potenza
+	// quando Scaphandre non e' disponibile (vedi mockPowerWatts).
+	activeTasks int64
 )
 
 type workerServer struct {
@@ -38,7 +46,7 @@ func startPowerMonitor() {
 	for {
 		scaphURL := os.Getenv("SCAPHANDRE_URL")
 		if scaphURL == "" {
-			scaphURL = "http://localhost:8080/metrics"
+			scaphURL = "http://scaphandre:8080/metrics"
 		}
 
 		watts := fetchScaphandreWatts(scaphURL)
@@ -113,13 +121,6 @@ func startGRPCServer() {
 
 // fetchScaphandreWatts queries Prometheus
 func fetchScaphandreWatts(url string) float32 {
-	defaultWatts := float32(2.50) // Fallback
-	if val := os.Getenv("DEFAULT_POWER_WATTS"); val != "" {
-		if parsed, err := strconv.ParseFloat(val, 32); err == nil {
-			defaultWatts = float32(parsed)
-		}
-	}
-
 	// 1. Timeout rigoroso per non far fallire l'Heartbeat gRPC
 	client := http.Client{
 		Timeout: 800 * time.Millisecond,
@@ -127,9 +128,12 @@ func fetchScaphandreWatts(url string) float32 {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		// 2. Log aggiornato, evidente, e senza virgolette errate alla fine
-		log.Printf("[WORKER] ⚠️ Impossibile contattare Scaphandre su %s: %v. Uso fallback: %.2fW", url, err, defaultWatts)
-		return defaultWatts
+		// Nessun log di errore qui: su cloud/VM standard questo ramo e'
+		// SEMPRE quello che si prende (verificato), quindi loggarlo come
+		// "warning" a ogni ciclo sarebbe solo rumore. Il mock e' il percorso
+		// primario in questi ambienti, non un fallback eccezionale.
+		log.Printf("Valori Scaphandre non disponibili. Passaggio al mock.")
+		return mockPowerWatts()
 	}
 	defer resp.Body.Close()
 
@@ -166,11 +170,64 @@ func fetchScaphandreWatts(url string) float32 {
 		log.Printf("[WORKER] ⚠️ Metrica scaph_host_power non trovata nel testo.")
 	}
 
-	return defaultWatts
+	return mockPowerWatts()
+}
+
+// mockPowerWatts stima la potenza istantanea quando l'hardware reale
+// (Scaphandre/RAPL) non e' disponibile — condizione verificata essere SEMPRE
+// vera su qualunque cloud/VM standard (Nitro su AWS EC2, Docker Desktop,
+// WSL2, ...): l'hypervisor non espone i registri RAPL al guest, e Scaphandre
+// va in panic invece di restituire un dato parziale. Il flag --vm di
+// Scaphandre non e' un'alternativa utilizzabile in questi casi: richiede
+// un'altra istanza di Scaphandre in esecuzione sull'hypervisor stesso, cosa
+// che su EC2 e' gestito da AWS e non e' accessibile all'utente.
+//
+// Il modello, invece di un valore fisso, riproduce la forma tipica della
+// potenza di un package CPU reale: un pavimento a riposo (idle) piu' una
+// quota dinamica che cresce con il carico e satura (P ≈ P_idle + P_dyn *
+// utilizzo), cosi' che il valore riportato reagisca davvero al numero di
+// richieste concorrenti in corso — a differenza del vecchio fallback
+// costante, che restava identico indipendentemente da qualunque stress test.
+func mockPowerWatts() float32 {
+	idleWatts := float64(2.50)
+	if val := os.Getenv("DEFAULT_POWER_WATTS"); val != "" {
+		if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+			idleWatts = parsed
+		}
+	}
+	dynamicWatts := float64(12.0)
+	if val := os.Getenv("MOCK_DYNAMIC_POWER_WATTS"); val != "" {
+		if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+			dynamicWatts = parsed
+		}
+	}
+
+	saturationTasks := float64(8.0)
+	if val := os.Getenv("SATURATION_TASKS"); val != "" {
+		if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+			saturationTasks = parsed
+		}
+	}
+
+	tasks := float64(atomic.LoadInt64(&activeTasks))
+	utilization := 1 - math.Exp(-tasks/saturationTasks) // 0 a riposo, tende a 1 sotto carico
+
+	base := idleWatts + dynamicWatts*utilization
+
+	// Piccola fluttuazione casuale per realismo.
+	fluctuation := base * 0.04
+	offset := (rand.Float64() * fluctuation * 2) - fluctuation
+
+	return float32(base + offset)
 }
 
 // handleTask simulates the working load
 func handleTask(w http.ResponseWriter, r *http.Request) {
+	// Segnala al mock di potenza che un task e' in corso: e' questo contatore
+	// che fa "salire i watt" quando arrivano piu' richieste concorrenti.
+	atomic.AddInt64(&activeTasks, 1)
+	defer atomic.AddInt64(&activeTasks, -1)
+
 	diffStr := r.URL.Query().Get("difficulty")
 	difficulty, err := strconv.Atoi(diffStr)
 	if err != nil || difficulty <= 0 {
