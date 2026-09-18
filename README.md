@@ -69,7 +69,7 @@ Le sezioni seguenti mostrano, passo per passo, come osservare dal vivo le caratt
 
 2. Chi è il leader in questo momento:
    ```bash
-   docker compose logs | grep "👑"
+   docker compose logs | grep "LEADER"
    ```
 
 3. Intensità di carbonio vista dal leader (aggiornata periodicamente per zona):
@@ -85,13 +85,13 @@ Le sezioni seguenti mostrano, passo per passo, come osservare dal vivo le caratt
 5. Uccisione del leader — i follower se ne accorgono e c'è una nuova elezione (vince lb-node-4, la priorità più alta tra i superstiti):
    ```bash
    docker kill lb-node-5
-   docker compose logs -f lb-node-4 lb-node-3 lb-node-2 lb-node-1 | grep -E "👑|elezion|LEADER"
+   docker compose logs -f lb-node-4 lb-node-3 lb-node-2 lb-node-1 | grep -E "elezione|LEADER"
    ```
 
 6. Resume del vecchio leader — priorità più alta di tutti, forza una nuova elezione e riprende il comando; lb-node-4 lo riconosce e cede:
    ```bash
    docker start lb-node-5
-   docker compose logs -f lb-node-4 | grep -E "👑|Nuovo leader riconosciuto|cedo il comando"
+   docker compose logs -f lb-node-4 | grep -E "Nuovo leader riconosciuto"
    ```
 
 7. Uccisione di un follower — nessuna conseguenza sul cluster, il leader resta lo stesso (contrasto diretto col punto 5):
@@ -137,12 +137,7 @@ Esperimenti e analisi
    ./run-experiments.sh
    ```
 
-2. Sweep sull'iperparametro α di Green Least Connections, su più livelli di concorrenza:
-   ```bash
-   ./sweep-alpha.sh
-   ```
-
-3. Generare tutti i grafici di analisi dai CSV prodotti sopra:
+2. Generare tutti i grafici di analisi dai CSV prodotti sopra:
    ```bash
    pip install matplotlib
    python generate_all_graphs.py
@@ -183,18 +178,3 @@ Mock di potenza (`docker-compose.yaml`, servizi `worker-*`)
 | `DEFAULT_POWER_WATTS`        | `2.50`          | Potenza a riposo (idle) usata dal mock quando Scaphandre non è disponibile. |
 | `MOCK_DYNAMIC_POWER_WATTS`   | `12.0`          | Potenza dinamica massima aggiuntiva sotto carico saturo.            |
 
----------
-Comandi utili
----------------
-1. Vedere lo stato di tutti i container:
-   ```bash
-   docker compose ps
-   ```
-2. Verificare se si sta usando Scaphandre reale o il mock (assente per default in questo progetto — vedi sezione seguente):
-   ```bash
-   docker compose logs | grep "Scaphandre letto con successo"
-   ```
-3. Pulizia completa (container, rete, volumi):
-   ```bash
-   docker compose down -v
-   ```

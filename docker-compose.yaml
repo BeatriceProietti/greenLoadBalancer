@@ -205,12 +205,12 @@ services:
       - "sleep 10 && ./loadgen_bin"
     environment:
       - LOADGEN_URLS=http://lb-node-1:8080/task,http://lb-node-2:8080/task,http://lb-node-3:8080/task,http://lb-node-4:8080/task,http://lb-node-5:8080/task
-      - LOADGEN_REQUESTS=3000
-      - LOADGEN_CONCURRENCY=30
-      - LOADGEN_DIFFICULTY_MIN=50000
-      - LOADGEN_DIFFICULTY_MAX=4000000
-      - LOADGEN_SEED=42
-      - LOADGEN_OUTPUT=/app/output/benchmark_results.csv
+      - LOADGEN_REQUESTS=${LOADGEN_REQUESTS:-1000}
+      - LOADGEN_CONCURRENCY=${LOADGEN_CONCURRENCY:-6}
+      - LOADGEN_DIFFICULTY_MIN=${LOADGEN_DIFFICULTY_MIN:-20000}
+      - LOADGEN_DIFFICULTY_MAX=${LOADGEN_DIFFICULTY_MAX:-300000}
+      - LOADGEN_SEED=${LOADGEN_SEED:-42}
+      - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/benchmark_results.csv}
 
   # =================================================================
   # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER - RIMOSSO
