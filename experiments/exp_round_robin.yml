@@ -11,6 +11,10 @@ services:
   loadgen:
     environment:
       - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/results_round_robin.csv}
+      - LOADGEN_REQUESTS=${LOADGEN_REQUESTS:-1000}
+      - LOADGEN_CONCURRENCY=${LOADGEN_CONCURRENCY:-6}
+      - LOADGEN_DIFFICULTY_MIN=${LOADGEN_DIFFICULTY_MIN:-20000}
+      - LOADGEN_DIFFICULTY_MAX=${LOADGEN_DIFFICULTY_MAX:-300000}
 
 # COMANDO:
 # docker compose -f docker-compose.yaml -f experiments/exp_round_robin.yml up --build --abort-on-container-exit
