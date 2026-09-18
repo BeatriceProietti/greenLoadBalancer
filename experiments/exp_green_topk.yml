@@ -1,10 +1,4 @@
 x-exp-env: &exp-env
-  # FIX: era LB_STRATEGY: "green_lc" (copiato per errore da exp_green_lc.yml)
-  # con LB_TOP_K: "30" — ma main.go legge LB_TOP_K_PERCENT, non LB_TOP_K, e
-  # PolicyFactory usa il valore come FRAZIONE (0.30), non percentuale (30).
-  # Con questi tre errori insieme, l'esperimento eseguiva davvero GreenLC con
-  # alpha non impostato (default 0), non GreenTopK — un'altra policy diversa
-  # da quella nominale, invisibile finche' non si controlla il codice.
   LB_STRATEGY: "green_top_k"
   LB_TOP_K_PERCENT: "0.30"
 
@@ -17,7 +11,8 @@ services:
 
   loadgen:
     environment:
-      - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/results_green_topk_k30.csv}
-
-# COMANDO:
-# docker compose -f docker-compose.yaml -f experiments/exp_green_topk.yml up --build --abort-on-container-exit
+      - LOADGEN_OUTPUT=${LOADGEN_OUTPUT:-/app/output/results_green_topk.csv}
+      - LOADGEN_REQUESTS=${LOADGEN_REQUESTS:-1000}
+      - LOADGEN_CONCURRENCY=${LOADGEN_CONCURRENCY:-18}
+      - LOADGEN_DIFFICULTY_MIN=${LOADGEN_DIFFICULTY_MIN:-20000}
+      - LOADGEN_DIFFICULTY_MAX=${LOADGEN_DIFFICULTY_MAX:-500000}

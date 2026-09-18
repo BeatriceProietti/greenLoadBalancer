@@ -130,9 +130,7 @@ func fetchScaphandreWatts(url string) float32 {
 	if err != nil {
 		// Nessun log di errore qui: su cloud/VM standard questo ramo e'
 		// SEMPRE quello che si prende (verificato), quindi loggarlo come
-		// "warning" a ogni ciclo sarebbe solo rumore. Il mock e' il percorso
-		// primario in questi ambienti, non un fallback eccezionale.
-		log.Printf("Valori Scaphandre non disponibili. Passaggio al mock.")
+		// "warning" a ogni ciclo sarebbe solo rumore.
 		return mockPowerWatts()
 	}
 	defer resp.Body.Close()

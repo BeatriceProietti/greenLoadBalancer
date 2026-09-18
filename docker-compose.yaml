@@ -213,17 +213,17 @@ services:
       - LOADGEN_OUTPUT=/app/output/benchmark_results.csv
 
   # =================================================================
-  # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER
+  # TELEMETRIA: SCAPHANDRE PROMETHEUS EXPORTER - RIMOSSO
   # =================================================================
-  scaphandre:
-    image: hubblo/scaphandre:latest
-    container_name: scaphandre
-    command: ["prometheus"]
-    privileged: true
-    pid: "host"
-    volumes:
-      - /sys:/sys:ro
-      - /proc:/proc:ro
-    ports:
-      - "8088:8080"
-    restart: unless-stopped
+  #scaphandre:
+  #  image: hubblo/scaphandre:latest
+    #  container_name: scaphandre
+    #  command: ["prometheus"]
+    #  privileged: true
+    #  pid: "host"
+      #  volumes:
+      #  - /sys:/sys:ro
+      #  - /proc:/proc:ro
+      #   ports:
+    #  - "8088:8080"
+  #  restart: unless-stopped

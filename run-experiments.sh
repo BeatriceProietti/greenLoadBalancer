@@ -2,7 +2,8 @@
 # Esegue tutte e 4 le policy, N volte ciascuna, con stack completo
 # down+up a ogni run (nessuno stato residuo tra un run e l'altro) e un
 # nome di file CSV distinto per ogni (policy, run) cosi' i risultati non
-# si sovrascrivono..
+# si sovrascrivono. Vedi PDF "Metodologia esperimenti" per la motivazione
+# di N (default 5) e dei parametri del load generator.
 set -e
 cd "$(dirname "$0")"
 
